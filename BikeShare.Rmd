@@ -1,0 +1,497 @@
+---
+title: "Bike-Share"
+output: html_document
+---
+
+```{r}
+#import data
+df <- read.csv("202004-divvy-tripdata.csv")
+```
+
+```{r}
+#import library
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(naniar)
+library(hms)
+```
+
+```{r}
+#column names
+colnames(df)
+```
+
+```{r}
+#first 6 rows
+head(df)
+```
+
+```{r}
+#view the data
+View(df)
+```
+
+```{r}
+count(distinct(df))
+```
+
+```{r}
+#check for null/missing values
+gg_miss_which(df)
+
+missing_data_logical <- is.na(df)
+missing_indices <- which(missing_data_logical, arr.ind = TRUE)
+```
+```{r}
+gg_miss_upset(df)
+```
+
+```{r}
+#Split Date and Time
+df$start_date <- as.Date(df$started_at)
+
+df$start_time <- format(as.POSIXct(df$started_at), format= "%H:%M:%S")
+
+df$end_date <- as.Date(df$ended_at)
+
+df$end_time <- format(as.POSIXct(df$ended_at), format= "%H:%M:%S")
+```
+
+```{r}
+df
+```
+
+```{r}
+#Find how many casual and members there are in the dataset and what percentage they make up
+total_rows = nrow(df)
+
+  result_member <- df %>%
+  filter(df$member_casual =="member") %>%
+  nrow()
+
+member_over_total = result_member / total_rows * 100
+paste("This is how many members there are:", result_member)
+paste("member makes up",round(member_over_total,2),"% of total dataset")
+
+
+result_casual <- df %>%
+  filter(df$member_casual =="casual") %>%
+  nrow()
+
+casual_over_total = result_casual / total_rows * 100
+paste("This is how many casuals there are:", result_casual)
+paste("casuals makes up",round(casual_over_total,2),"% of total dataset")
+
+ratio_casual_member = result_casual / result_member
+paste("Number of casual riders", result_casual, "Number of member riders", result_member, "Ratio of casual to member", round(ratio_casual_member,2))
+
+```
+```{r}
+pie_data <- data.frame(
+  category = c("Member", "Casual"),
+  count = c(result_member, result_casual)
+)
+
+# Create the pie chart
+ggplot(pie_data, aes(x = "", y = count, fill = category)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar("y") +
+  labs(
+    title = "Member vs. Casual Riders",
+    fill = "Category",
+    x = NULL  # Remove x-axis label
+  ) +
+  coord_polar("y", start = 0) +
+  geom_text(
+    aes(y = count, label = count),
+    position = position_stack(vjust = 0.5),
+    size = 6,
+    col = "white",
+    fontface = "bold"
+  ) +
+  scale_fill_manual (values = c('#e41a1c', '#377eb8')) +
+  theme_void() +
+  labs(
+    title = "Member vs Casual Riders",
+    subtitle = "Pie Plot, number of Member and Casual Riders",
+    caption = "April to May 2004 Data",
+    fill = ""
+  )
+```
+
+```{r}
+#convert date into day
+
+df$start_day_of_the_week <-weekdays(df$start_date)
+df$end_day_of_the_week <-weekdays(df$end_date)
+df
+```
+```{r}
+#Filter data to find inconsistencies
+filtered_date <- df %>%
+  filter(df$start_time > df$end_time, df$end_date == df$start_date)
+
+paste("we discovere there are", nrow(filtered_date),"incosistent data entries where the start time is greater than end time")
+```
+```{r}
+#Remove rows where end < start and they same day returns
+df <- df %>%
+  filter(!(df$end_time < df$start_time & df$start_date == df$end_date))
+df
+```
+```{r}
+#calculate end time minus start time for ride length
+
+df$ride_length = as_hms(difftime(df$started_at, df$ended_at))
+df
+```
+
+```{r}
+#Find average length for ride, most popular day of week, least popular day of week, max/min bike ride, frequent station start/end
+#days where start_day_of_the_week doesnt equal end_day_of_the_week
+
+#Total ride time of April
+total_seconds_as_numeric <- sum(as.numeric(df$ride_length)) #convert column to numeric (in seconds) and sum it 
+ride_length_sum <- as.hms(total_seconds_as_numeric) #convert seconds back to H:M:S format
+paste("Total ride length of April", ride_length_sum)
+```
+
+```{r}
+#Average ride time of April
+total_seconds_as_mean <- mean(as.numeric(df$ride_length))
+average_ride_length = as.hms(total_seconds_as_mean)
+paste("Total ride length of April", average_ride_length)
+```
+
+```{r}
+#Most frequent day bikes were rented at the start
+frequency_table <- table(df$start_day_of_the_week)
+most_frequent_values_started <- names(frequency_table[which.max(frequency_table)])
+paste("Most frequent day of the week",most_frequent_values_started)
+```
+
+```{r}
+#Least frequent day bikes were rented
+least_frequent_values_started <- names(frequency_table[which.min(frequency_table)])
+paste("Least frequent day of the week",least_frequent_values_started)
+```
+
+```{r}
+#Most frequent day bikes were returned at the end
+frequency_table <- table(df$end_day_of_the_week)
+most_frequent_values_return <- names(frequency_table[which.max(frequency_table)])
+paste("Most frequent day of the week",most_frequent_values_return)
+```
+```{r}
+#Most frequent station
+frequency_table <- table(df$start_station_id)
+most_frequent_start_station_id <- names(frequency_table[which.max(frequency_table)])
+frequency_df <- as.data.frame(frequency_table)
+frequency_df <- frequency_df[order(-frequency_df$Freq), ]
+
+# Create a bar plot
+barplot(frequency_df$Freq, names.arg = frequency_df$Var1, 
+        main = "Start Station ID Frequency",
+        xlab = "Start Station ID",
+        ylab = "Frequency",
+        col = "skyblue",
+        las = 2,  # Rotate x-axis labels for better readability
+        cex.names = 0.6)  # Adjust the size of x-axis labels
+
+
+```
+
+```{r}
+#CHANGE THIS TO A HISTOGRAM 
+#I dont understand how to fix the x-axis labels
+ggplot(frequency_df, aes(x = reorder(Var1, -Freq), y = Freq)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(
+    title = "Start Station ID Frequency",
+    x = "Start Station ID",
+    y = "Frequency"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 0.3)) 
+
+paste("Most frequent station",most_frequent_start_station_id)
+```
+
+```{r}
+#Least frequent station
+least_frequent_start_station_id <- names(frequency_table[which.min(frequency_table)])
+paste("Least frequent station",least_frequent_start_station_id)
+```
+
+```{r}
+#Max bike ride length
+max_ride_length_hms = as.numeric(df$ride_length)
+max_ride_length_hms = max_ride_length_hms * -1
+str(max_ride_length_hms)
+max_ride_length_hms = max(max_ride_length_hms)
+
+max_ride_length_hms <- as.hms(max(max_ride_length_hms*-1))
+str(max_ride_length_hms)
+paste("The longest ride", max_ride_length_hms)
+```
+
+
+```{r}
+#Min bike ride length
+min_ride_length_hms = as.numeric(df$ride_length)
+min_ride_length_hms = min_ride_length_hms * -1
+str(min_ride_length_hms)
+min_ride_length_hms = min(min_ride_length_hms)
+
+min_ride_length_hms <- as.hms(min(min_ride_length_hms*-1))
+str(min_ride_length_hms)
+paste("The shortest ride", min_ride_length_hms)
+```
+
+
+
+```{r}
+#Days where start day doesnt equal end day
+
+different_date_return <- df %>%
+  filter(start_date < end_date)
+different_date_return
+```
+
+```{r}
+#How many member and casual customers there are 
+ggplot(data=df) + geom_bar(mapping=aes(x=member_casual, fill=member_casual)) + ggtitle("Member and Casual")
+```
+
+```{r}
+#Which day of the week is most popular for rentals
+ggplot(data=df) + geom_col(mapping=aes(x=start_day_of_the_week, y=total_rows, fill = start_day_of_the_week)) + labs(title = "Rentals during a week",
+       x = "Day of the Week",
+       y = "Total Rentals",
+       fill = "Days of the week")
+```
+
+```{r}
+#Disparity which days casual and members rent bikes
+df %>% 
+  group_by(member_casual, start_day_of_the_week) %>% 
+  summarise(number_of_rides = n()) %>% 
+  ggplot(aes(x = start_day_of_the_week, y = number_of_rides, fill = member_casual)) +
+  geom_col(position = "dodge") + labs(title = "Rental for Casual and Member Customers",
+       x = "Day of the Week",
+       y = "Total Rentals",
+       fill = "Customer Type")
+```
+
+```{r}
+#Calculate the ratio for casual and member for day of rental
+rental_ratios <- df %>%
+  group_by(start_day_of_the_week,member_casual) %>%
+  summarise(total_rentals = n()) %>%
+  group_by(start_day_of_the_week) %>%
+  mutate(total_count = sum(total_rentals)) %>%
+  mutate(rental_ratio = total_rentals / total_count)
+rental_ratios
+```
+
+```{r}
+
+# Create a grouped bar chart
+ggplot(rental_ratios, aes(x = start_day_of_the_week, y = rental_ratio, fill = member_casual)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Rental Ratios for Casual and Member Customers",
+       x = "Day of the Week",
+       y = "Rental Ratio",
+       fill = "Customer Type") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+```{r}
+#Most popular station for "casual" where rentals are >175
+df %>%
+  group_by(start_station_name, member_casual) %>% 
+  summarise(popular_station = n()) %>%
+  filter(popular_station > 175, member_casual == "casual") %>%
+  ggplot(aes(x = start_station_name, y = popular_station, fill = member_casual)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Stacked Bar Chart of Station Popularity by Member Causal", x = "Start Station Name", y = "Count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+```{r}
+
+#Most popular station for "casual" where rentals are >400
+df %>%
+  group_by(start_station_name, member_casual) %>% 
+  summarise(popular_station = n()) %>%
+  filter(popular_station > 400, member_casual == "member") %>%
+  ggplot(aes(x = start_station_name, y = popular_station, fill = member_casual)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Stacked Bar Chart of Station Popularity by Member Causal", x = "Start Station Name", y = "Count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+```{r}
+#Calculate the difference in return and start of bike rental
+
+different_date_return <- different_date_return %>%
+  mutate(duration = as.Date(end_date) - as.Date(start_date))
+
+different_date_return
+```
+
+```{r}
+short_term <- as.difftime(2, units = "days")
+long_term <- as.difftime(8, units = "days")
+
+
+different_date_return <- different_date_return %>%
+  mutate(rental_duration_category = case_when(
+    as.numeric(duration) < as.numeric(short_term) ~ "Short Term",
+    as.numeric(duration) < as.numeric(long_term) ~ "Medium Term",
+    TRUE ~"Long Term"
+  ))
+
+different_date_return
+```
+
+```{r}
+ggplot(data = different_date_return, aes(x = rental_duration_category, fill = member_casual)) +
+  geom_bar(position = "dodge") +
+  labs(
+    x = "Rental Duration",
+    y = "Count",
+    fill = "Customer Type"
+  ) +
+  ggtitle("Distribution of Rental Durations") +
+  theme_minimal()
+```
+
+```{r}
+temp_df <- df %>%
+  group_by(start_day_of_the_week, start_station_name) %>%
+  summarise(rental_count = n())
+temp_df
+
+filtered_temp_df <- temp_df %>%
+  filter(rental_count > 100)
+filtered_temp_df
+
+temp_df <- df %>%
+  group_by(start_day_of_the_week, start_station_name, member_casual) %>%
+  summarise(rental_count = n())
+temp_df
+
+filtered_temp_df_casual <- temp_df %>%
+  filter(member_casual == "casual", rental_count > 50)
+filtered_temp_df_casual
+
+filtered_temp_df_member <- temp_df %>%
+  filter(member_casual == "member", rental_count > 50) 
+filtered_temp_df_casual
+
+```
+
+```{r}
+#Shows which areas have rental count over 100 in a given day
+ggplot(data = filtered_temp_df, aes(x=start_day_of_the_week,y=start_station_name,fill = rental_count)) + geom_tile() + labs(title = "Popular Stations Days With Rentals > 100",
+       x = "Day of the Week",
+       y = "Station Names",
+       fill = "Rentals")
+```
+
+```{r}
+#Shows which areas have rental count over 100 in a given day
+ggplot(data = filtered_temp_df_casual, aes(x=start_day_of_the_week,y=start_station_name,fill = rental_count)) + geom_tile() + labs(title = "Popular Stations Days With Rentals > 50 For Casuals",
+       x = "Day of the Week",
+       y = "Station Names",
+       fill = "Rentals")
+```
+
+```{r}
+#Shows which areas have rental count over 100 in a given day
+ggplot(data = filtered_temp_df_member, aes(x=start_day_of_the_week,y=start_station_name,fill = rental_count)) + geom_tile() + labs(title = "Popular Stations Days With Rentals > 50 For Members",
+       x = "Day of the Week",
+       y = "Station Names",
+       fill = "Rentals")
+```
+```{r}
+ride_time <- df %>%
+  group_by(member_casual, start_day_of_the_week) %>%
+  summarise(ride_time_customer = sum(as.numeric(ride_length))) 
+
+ride_time <- ride_time %>%
+  mutate(ride_time_customer = ride_time_customer * -1)
+ 
+ride_time <- ride_time %>%
+  mutate(ride_time_customer =hms(ride_time_customer))
+ride_time
+```
+```{r}
+ride_time_casual <- ride_time %>%
+  filter(member_casual == "casual")
+ride_time_member <- ride_time %>%
+  filter(member_casual == "member")
+average_ride_time_casual <- mean(ride_time_casual$ride_time_customer)
+average_ride_time_member <- mean(ride_time_member$ride_time_customer)
+
+ggplot(data = ride_time) +
+  geom_bar(aes(x = start_day_of_the_week, y = ride_time_customer, fill = member_casual), stat = "identity", position ="dodge") +
+  labs(
+    title = "Total Ride Times by Day of the Week",
+    x = "Day of the Week",
+    y = "Total Ride Time",
+    fill = "Customer Type"
+  ) +
+  theme_minimal() +
+  geom_hline(yintercept = average_ride_time_member, color = "green", linetype = "solid") +  # Add the first average line
+  geom_hline(yintercept = average_ride_time_casual, color = "red", linetype = "solid") +  # Add the second average line
+  geom_text(aes(x = 1.8, y = average_ride_time_member, label = "Member Average", vjust = 0), color = "black") +  # Label for the first line
+  geom_text(aes(x = 1.8, y = average_ride_time_casual, label = "Casual Average", vjust = 0), color = "black") + # Label for the second line
+  theme(panel.background = element_rect(fill = "white"))
+
+
+```
+
+```{r}
+temp_df <- df %>%
+  group_by(member_casual, start_day_of_the_week) %>%
+  summarize(average_ride_length = round(mean(as.numeric(ride_length) * -1),0)) %>%
+  mutate(average_ride_length = hms(average_ride_length))
+print(temp_df$average_ride_length)
+
+```
+
+```{r}
+ggplot(data = temp_df) +
+  geom_bar(aes(x = start_day_of_the_week, y = average_ride_length, fill = member_casual), stat = "identity", position ="dodge") +
+  labs(
+    title = "Average Ride Times by Day of the Week",
+    x = "Day of the Week",
+    y = "Average Ride Time",
+    fill = "Customer Type"
+  )
+```
+```{r}
+x_df <- df %>%
+  mutate(
+    datetime = as.POSIXct(paste(start_date, start_time)),
+    hour_of_day = hour(datetime)
+  )
+
+ggplot(data = x_df) +
+  geom_histogram(aes(x = hour_of_day, fill = member_casual), bins = 24, color = "black") +
+  facet_wrap(~member_casual, nrow = 1) +
+  labs(
+    title = "Train Activity by Hour of the Day",
+    x = "Hour of the Day",
+    y = "Number of Train Rides"
+  ) +
+  theme_minimal()
+
+```
+
